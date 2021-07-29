@@ -1,0 +1,326 @@
+---
+title: "nepsy-nepsyeic"
+output: pdf_document
+---
+
+PREPOST VOLUMETRY CODE 
+
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+nepsyeicPrePost <- read_excel("Desktop/R/PretermControl/Neuropsych/nepsyeicpretermcontrol.xlsx")
+   
+
+str(nepsyeicPrePost)
+
+nepsyeicPrePost$Status <- as.factor(nepsyeicPrePost$Status)
+
+
+str(nepsyeicPrePost)
+
+#check the data for outliers
+summary(nepsyeicPrePost)
+
+levels(nepsyeicPrePost$Group)
+
+#relevel
+
+nepsyeicPrePost$Status <- relevel(nepsyeicPrePost$Status, ref= "Preterm")
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+#writecsv with this table
+
+#Again with Volumetrically Corrected Data
+
+
+table_one <- tableby(Status ~ ., data= nepsyeicPrePost)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/nepsyeicPrePostSummary.csv")
+
+nepsyeicPrePost
+
+
+```
+
+To Volumetrically Correct the Data
+
+for (column.name in names(nepsyeicPrePost) [9:ncol(nepsyeicPrePost)]) {
+  nepsyeicPrePost[column.name] = nepsyeicPrePost[column.name] / nepsyeicPrePost$ICV
+}
+
+view(nepsyeicPrePost)
+
+
+```{r}
+
+#testing lmer
+library(lme4)
+
+model <- lmer(TN ~ Status + (1 | Subject) + Age, data = nepsyeicPrePost, REML = FALSE)
+
+##tring to do a paired sample t.test
+
+
+library(dplyr)
+
+
+#visualize data using boxplots
+
+library("PairedData")
+
+# Subset vol data before treatment
+before <- subset(nepsyeicPrePost,  Group == "Pre", TN,
+                 drop = TRUE)
+# subset weight data after treatment
+after <- subset(nepsyeicPrePost,  Group == "Post", TN,
+                 drop = TRUE)
+
+# Plot paired data
+library(PairedData)
+pd <- paired(before, after)
+plot(pd, type = "profile") + theme_bw()
+
+ggplot(data=nepsyeicPrePost) + aes(x= Group, y= TN, colour= Group) + geom_boxplot()
+
+
+##checking normality 
+
+# compute the difference
+d <- with(nepsyeicPrePost, 
+        TN[Group == "Pre"] - TN[Group == "Post"])
+d
+
+# Shapiro-Wilk normality test for the differences
+shapiro.test(d) # => p-value = 0.4
+
+#pvalue above 0.05 means that we can assume normality
+
+qqplot <- qqnorm(nepsyeicPrePost$TN, pch = 1, frame = FALSE)
+
+histogram(nepsyeicPrePost$TN)
+
+#nowt.test (if we were to assume normality) #cant use here since we havent volumetrically corrected the data and need to add it as covariate
+
+res <- t.test(TN ~ Group, nepsyeicPrePost, paired = TRUE)
+res
+
+#lmer results
+
+summary(model)
+
+##plot the data
+
+ggplot(nepsyeicPrePost) + aes(x= Group, y = TN, color= Group) + geom_boxplot() + labs(title= "Volume of Left Lateral Nucleus Pre and Post Mindfulness Intervention", x= "Intervention Group", y= "Volume") 
+
+
+##Now we use the final lmer formula
+
+fit.compact = lmer(formula = TN ~ Group + Age + Gender + (1 | ID),
+                   data = nepsyeicPrePost)
+fit.augmented = lmer(formula = TN ~ Group +  (1 | ID),
+                     data = nepsyeicPrePost)
+
+# compare via Chisq-test
+anova(fit.compact, fit.augmented)
+```
+nepsyeic <-as.data.frame(nepsyeicPrePost[,c(9:28)])
+dim(nepsyeic)
+for (i in 9:length(nepsyeic)) { 
+  variable <- nepsyeic[,i]
+  lme_cer <- lmer(variable ~ Group + ICV + (1 | Subject), data = nepsyeicPrePost, REML = FALSE)
+print(summary(lme_cer))
+}
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+library(broom.mixed)
+library(lmerTest)
+
+storage <- list()
+for(i in names(nepsyeicPrePost)[-c(1:3)]){
+  storage[[i]] <- lm(get(i) ~ Status, data= nepsyeicPrePost)
+}
+
+```
+
+```{r}
+
+library(lme4)
+library(broom)
+library(broomExtra)
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+to <- subset(tab, select = -c(2))
+
+to
+
+newtable <- filter(to, term == "StatusControl")
+
+write.csv(to, "~/Documents/nepsyeicasymmetrypvalues.csv")
+
+head(newtable)
+
+View(pvaluecheck)
+
+pvaluec <- subset(newtable, p.value < 0.1)
+
+pvaluec
+
+#rightBasalnucleus
+
+
+
+```
+
+
+```{r}
+
+#means 
+
+means <- nepsyeicPrePost %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/nepsyeicmeans.csv")
+
+filmean <- trymean[-c(1:2), ]
+
+filmean
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- nepsyeicPrePost %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/nepsyeicSD.csv")
+
+filsd <- trsd[-c(1:2), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Pre", "Mean ± SD Post")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/ThalMeansSD.csv")
+
+newtable <- cbind(filmean, newtable)
+
+newtable
+
+```
+
+```{r}
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(nepsyeicPrePost)[-c(1:2)]) {
+ stor[[i]] <- aov(as.formula(paste(i, "~ Status")), data= nepsyeicPrePost) 
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+ees
+
+phh <- cbind(filmean, ph, ees)
+
+phh
+
+```
+
+
+```{r}
+
+
+ordered <- newtable[order(newtable$p.value), ]
+
+write.csv(ordered, "~/Documents/nepsyeicyorderedpvalues.csv")
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Documents/correctionsei.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/finalnepsyeic.csv")
+
+
+```

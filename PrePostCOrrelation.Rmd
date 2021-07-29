@@ -1,0 +1,74 @@
+---
+title: "Correlations-PrePost"
+output: pdf_document
+---
+\
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+prepostcor <- read_excel("~/Desktop/R/PrePost/Asymmetry/HippoASymForCorrelation.xlsx")
+   
+
+str(prepostcor)
+
+prepostcor$Group <- as.factor(prepostcor$Group)
+
+prepostcor$Gender <- as.factor(prepostcor$Gender)
+
+prepostcor$Age <- as.numeric(prepostcor$Age)
+
+str(prepostcor)
+
+#check the data for outliers
+summary(prepostcor)
+
+levels(prepostcor$Group)
+
+#relevel
+
+prepostcor$Group <- relevel(prepostcor$Group, ref= "Pre")
+
+```
+
+```{r}
+
+library(GGally)
+
+test <- ggcorr(prepostcor[-3, ],  geom = "text", nbreaks = 5, palette = "RdYlBu", hjust = 1, label = TRUE, label_alpha = 0.5)
+
+test
+
+
+
+
+```

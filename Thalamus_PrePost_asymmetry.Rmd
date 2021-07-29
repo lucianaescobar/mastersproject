@@ -1,0 +1,423 @@
+---
+title: "Thalamus_Aymmetry_PrePost"
+output: pdf_document
+---
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+ThalAsymPrePost <- read_excel("~/Desktop/R/PrePost/Asymmetry/Final_Thalamus_PrePost_Asymm.xlsx")
+str(ThalAsymPrePost)
+
+ThalAsymPrePost$Group <- as.factor(ThalAsymPrePost$Group)
+
+ThalAsymPrePost$Gender <- as.factor(ThalAsymPrePost$Gender)
+
+ThalAsymPrePost$Age <- as.numeric(ThalAsymPrePost$Age)
+
+str(ThalAsymPrePost)
+
+#check the data for outliers
+summary(ThalAsymPrePost)
+
+levels(ThalAsymPrePost$Group)
+
+#relevel
+
+ThalAsymPrePost$Group <- relevel(ThalAsymPrePost$Group, ref= "Pre")
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+#writecsv with this table
+
+#Again with Volumetrically Corrected Data
+
+
+table_one <- tableby(Group ~ ., data= ThalAsymPrePost)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/TableOne/ThalAsymPrePostSummary.csv")
+
+
+
+```
+
+To Volumetrically Correct the Data
+
+for (column.name in names(ThalAsymPrePost) [9:ncol(ThalAsymPrePost)]) {
+  ThalAsymPrePost[column.name] = ThalAsymPrePost[column.name] / ThalAsymPrePost$ICV
+}
+
+view(ThalAsymPrePost)
+
+
+```{r}
+
+
+#means
+
+means <- ThalAsymPrePost %>%
+  group_by(Group) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalAsymPrePostmeans.csv")
+
+filmean <- trymean[-c(1:5), ]
+
+filmean
+
+colnames(filmean) <- c("Mean_Pre", "Mean_Post")
+
+sd <- ThalAsymPrePost %>%
+  group_by(Group) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/ThalAsymPrePostSD.csv")
+
+filsd <- trsd[-c(1:5), ]
+
+colnames(filsd) <- c("SD_Pre", "SD_Post")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Post)
+
+filmean$SD_Post <- filsd$SD_Post
+
+filmean$SD_Pre <- filsd$SD_Pre
+
+filmean
+
+
+```
+
+
+```{r}
+
+#testing lmer
+library(lme4)
+
+model <- lmer(LGN ~ Group + Age + (1 | Subject), data = ThalAsymPrePost, REML = FALSE)
+
+##tring to do a paired sample t.test
+
+
+library(dplyr)
+
+
+#visualize data using boxplots
+
+library("PairedData")
+
+# Subset vol data before treatment
+before <- subset(ThalAsymPrePost,  Group == "Pre", Lateralnucleus,
+                 drop = TRUE)
+# subset weight data after treatment
+after <- subset(ThalAsymPrePost,  Group == "Post", Lateralnucleus,
+                 drop = TRUE)
+
+# Plot paired data
+library(PairedData)
+
+ggplot(data=ThalAsymPrePost) + aes(x= Group, y= Lateralnucleus, colour= Group) + geom_boxplot()
+
+
+##checking normality 
+
+# compute the difference
+d <- with(ThalAsymPrePost, 
+        Lateralnucleus[Group == "Pre"] - Lateralnucleus[Group == "Post"])
+d
+
+# Shapiro-Wilk normality test for the differences
+shapiro.test(d) # => p-value = 0.4
+
+#pvalue above 0.05 means that we can assume normality
+
+qqplot <- qqnorm(ThalAsymPrePost$Lateralnucleus, pch = 1, frame = FALSE)
+
+histogram(ThalAsymPrePost$Lateralnucleus)
+
+#nowt.test (if we were to assume normality) #cant use here since we havent volumetrically corrected the data and need to add it as covariate
+
+res <- t.test(Lateralnucleus ~ Group, ThalAsymPrePost, paired = TRUE)
+res
+
+#lmer results
+
+summary(model)
+
+##plot the data
+
+ggplot(ThalAsymPrePost) + aes(x= Group, y = Lateralnucleus, color= Group) + geom_boxplot() + labs(title= "Volume of Left Lateral Nucleus Pre and Post Mindfulness Intervention", x= "Intervention Group", y= "Volume") 
+
+
+##Now we use the final lmer formula
+
+fit.compact = lmer(formula = Lateralnucleus ~ Group + Age + Gender + (1 | Subject),
+                   data = ThalAsymPrePost)
+fit.augmented = lmer(formula = Lateralnucleus ~ Group + (1 | Subject),
+                     data = ThalAsymPrePost)
+
+# compare via Chisq-test
+anova(fit.compact, fit.augmented)
+```
+Thal <-as.data.frame(ThalAsymPrePost[,c(9:28)])
+dim(Thal)
+for (i in 9:length(Thal)) { 
+  variable <- Thal[,i]
+  lme_cer <- lmer(variable ~ Group + ICV + (1 | Subject), data = ThalAsymPrePost, REML = FALSE)
+print(summary(lme_cer))
+}
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+library(broom.mixed)
+library(lmerTest)
+
+storage <- list()
+for(i in names(ThalAsymPrePost)[-c(1:8)]){
+  storage[[i]] <- lmer(get(i) ~ Group + (1 | Subject), data= ThalAsymPrePost, REML = FALSE)
+}
+
+library(lme4)
+library(broom)
+library(broomExtra)
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+to <- subset(tab, select = -c(2))
+
+newtable <- filter(to, term == "GroupPost")
+
+newtable
+
+write.csv(to, "~/Desktop/PVAL/filtered/Thalasymmetrypvalues.csv")
+
+head(newtable)
+
+pvaluec <- subset(newtable, p.value < 0.05)
+
+pvaluec
+
+#no significant 
+```
+```{r}
+
+library(effectsize)
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalAsymPrePost)[-c(1:9)]) {
+ stor[[i]] <- lmer(as.formula(paste(i, "~ Group + (1|Subject)")), 
+    data = ThalAsymPrePost)
+ stor2[[i]] <- effectsize(stor[[i]]) }
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+ees
+
+phh <- cbind(filmean, ph, ees)
+
+phh
+
+##
+
+
+```
+
+```{r}
+
+#testing the normality of the residuals pt 2?
+
+#bonferroni corrections
+
+newtable2 <- cbind(filmean, newtable)
+
+newtable2
+
+ordered <- newtable2[order(newtable2$p.value), ]
+ordered
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPrePostasymmetryorderedpvalues.csv")
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalPrePostaasymmetry.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/finalThalPrePostasymmprepost.csv")
+
+```
+
+
+```{r}
+
+library(emmeans)
+library(rstatix)
+
+ThalPC3 <- read_excel("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced.xlsx")
+
+ThalPC3
+
+responseList <- names(ThalPC3)[-c(1:8)]
+
+pwc1 <- list()
+for (i in responseList) {
+  pwc1[[i]] <- ThalPC3 %>% 
+  lmer(as.formula(paste(i, "~ Group + (1 | Subject)"), data= ThalAsymPrePost, REML = FALSE)}
+                  
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+ph
+means <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPCmeans.csv")
+
+filmean <- trymean[-c(1:2), ]
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/HipAsymPCSD.csv")
+
+filsd <- trsd[-c(1:2), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Control", "Mean ± SD Preterm")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/ThalMeansSD.csv")
+
+
+#lets just try
+
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalPC3)[-c(1:8)]) {
+ stor[[i]] <- aov(as.formula(paste(i, "~ Status")), covariate = "ICV", data= ThalPC3) 
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+ees
+
+phh <- cbind(filmean, ph, ees)
+
+phh
+
+##
+
+
+ordered <-phh[order(phh$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/hippoASymFINAL.csv")
+
+```

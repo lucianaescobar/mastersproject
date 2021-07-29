@@ -1,0 +1,370 @@
+---
+title: "AmyPC"
+output: pdf_document
+---
+
+Volumetrically corrected
+reduced 
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+AmyPC <- read_excel("~/Desktop/R/PretermControl/volumetry/CorrectedAmy_PC.xlsx")
+str(AmyPC)
+
+AmyPC$Group <- as.factor(AmyPC$Group)
+
+AmyPC$Gender <- as.factor(AmyPC$Gender)
+
+AmyPC$Age <- as.numeric(AmyPC$Age)
+
+AmyPC$Status <- as.factor(AmyPC$Status)
+
+AmyPC$GA <- as.numeric(AmyPC$GA)
+
+AmyPC$Pds_N <- as.numeric(AmyPC$Pds_N)
+
+str(AmyPC)
+
+#check the data for outliers
+summary(AmyPC)
+
+levels(AmyPC$Group)
+
+#relevel
+
+AmyPC$Status <- relevel(AmyPC$Status, ref= "Preterm")
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+#writecsv with this table
+
+#Again with Volumetrically Corrected Data
+
+
+table_one <- tableby(Group ~ ., data= AmyPC)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/AmyPCSummary.csv")
+
+
+
+```
+
+To Volumetrically Correct the Data
+
+```{r}
+
+for (column.name in names(AmyPC) [10:ncol(AmyPC)]) {
+  AmyPC[column.name] = AmyPC[column.name] / AmyPC$ICV
+}
+
+AmyPC
+
+```
+#VOLUMETRIC CORRECTIONS
+
+
+for (column.name in names(AmyPC) [10:ncol(AmyPC)]) {
+  AmyPC[column.name] = AmyPC[column.name] / AmyPC$ICV
+}
+
+#ANCOVA 
+
+storage <- list()
+gavtable <- list()
+for(i in names(AmyPC)[-c(1:9)]) {
+  storage[[i]] <- AmyPC %>% anova_test(as.formula(paste(i, "~ ICV + Status")))
+  gavtable[[i]] <- get_anova_table(storage[[i]])
+}
+
+gavtable
+
+View(gavtable)
+
+
+
+res.aov <- AmyPC %>% anova_test(left_Lateral_nucleus ~ ICV + Status)
+get_anova_table(res.aov)
+
+
+
+
+```{r}
+#testing lmer
+library(lme4)
+
+l1 <- lm(data= AmyPC, left_Lateral_nucleus~ Status + Age + Pds_N + GA)
+
+summary(l1)
+
+#looping lm for entire data set
+
+storage <- list()
+for(i in names(AmyPC)[-c(1:9)]){
+  storage[[i]] <- lm(get(i) ~ Status, AmyPC)
+}
+
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+tab
+
+to <- subset(tab, select = -c(2))
+
+head(to)
+
+newtable <- filter(to, term == "StatusControl")
+
+newtable
+
+write.csv(to, "~/Documents/AmyPCpvalues.csv")
+
+head(newtable)
+
+```
+Amy <-as.data.frame(AmyPC[,c(9:28)])
+dim(Amy)
+for (i in 9:length(Amy)) { 
+  variable <- Amy[,i]
+  lme_cer <- lmer(variable ~ Group + ICV + (1 | Subject), data = AmyPC, REML = FALSE)
+print(summary(lme_cer))
+}
+```{r}
+
+
+ordered <- newtable[order(newtable$p.value), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Documents/AmyPCorderedpvalues.csv")
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Documents/correctionsAmypoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(res2, "~/Documents/finalAmypoPCt.csv")
+
+
+```
+
+
+```{r}
+
+AmyPC3 <- read_excel("~/Desktop/R/PretermControl/volumetry/CorrectedAmy_PC.xlsx")
+
+responseList <- names(AmyPC3)[-c(1:9)]
+
+pwc1 <- list()
+for (i in responseList) 
+  pwc1[[i]] <- AmyPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Status")), covariate = "ICV",
+    p.adjust.method = "fdr")
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+ph
+
+#lets just try
+
+ordered <-ph[order(ph$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsAmyPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+```
+
+
+
+```{r}
+
+library(emmeans)
+library(rstatix)
+
+ThalPC3 <- read_excel("~/Desktop/R/PretermControl/volumetry/CorrectedAmy_PC.xlsx")
+ThalPC3
+
+responseList <- names(ThalPC3)[-c(1:9)]
+
+pwc1 <- list()
+for (i in responseList) 
+  pwc1[[i]] <- ThalPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Status")), covariate = "ICV",
+    p.adjust.method = "fdr")
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+ph
+means <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPCmeans.csv")
+
+filmean <- trymean[-c(1:3), ]
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/HipAsymPCSD.csv")
+
+filsd <- trsd[-c(1:3), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Control", "Mean ± SD Preterm")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/ThalMeansSD.csv")
+
+
+#lets just try
+
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalPC3)[-c(1:9)]) {
+ stor[[i]] <- aov(as.formula(paste(i, "~ Status")), covariate = "ICV", data= ThalPC3) 
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+ees
+
+phh <- cbind(filmean, ph, ees)
+
+phh
+
+##
+
+
+ordered <-phh[order(phh$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/hippoASymFINAL.csv")
+
+```
+
+
+
+
+
+
+
+```

@@ -1,0 +1,629 @@
+---
+title: "April10_PC_Hippo"
+output: pdf_document
+---
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+HipPC <- read_excel("~/Desktop/R/PretermControl/volumetry/Hippo_PC_Reduced.xlsx")
+
+str(HipPC)
+
+HipPC$Group <- as.factor(HipPC$Group)
+
+HipPC$Gender <- as.factor(HipPC$Gender)
+
+HipPC$Age <- as.numeric(HipPC$Age)
+
+HipPC$Status <- as.factor(HipPC$Status)
+
+HipPC$GA <- as.numeric(HipPC$GA)
+
+HipPC$Pds_N <- as.numeric(HipPC$Pds_N)
+
+str(HipPC)
+
+#check the data for outliers
+summary(HipPC)
+
+levels(HipPC$Group)
+
+#relevel
+
+HipPC$Status <- relevel(HipPC$Status, ref= "Preterm")
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+#writecsv with this table
+
+#Again with Volumetrically Corrected Data
+
+
+table_one <- tableby(Status ~ ., data= HipPC)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/HipPCSummary.csv")
+
+
+
+```
+
+To Volumetrically Correct the Data
+
+for (column.name in names(HipPC) [9:ncol(HipPC)]) {
+  HipPC[column.name] = HipPC[column.name] / HipPC$ICV
+}
+
+view(HipPC)
+
+
+```{r}
+
+for (column.name in names(HipPC)[-c(1:9)]) {
+  HipPC[column.name] = HipPC[column.name] / HipPC$ICV
+}
+
+head(HipPC)
+
+```
+
+```{r}
+#testing lmer
+library(lme4)
+
+HipPC <- HipPC
+
+head(HipPC)
+
+```
+
+```{r}
+
+l1 <- lm(data= HipPC, right_Whole_hippocampus ~ Status + Age)
+
+summary(l1)
+
+#looping lm for entire data set
+
+storage <- list()
+for(i in names(HipPC)[-c(1:9)]){
+  storage[[i]] <- lm(get(i) ~ Status, HipPC)
+}
+
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+to <- subset(tab, select = -c(2))
+
+newtable <- filter(to, term == "StatusControl")
+
+newtable
+
+write.csv(to, "~/Documents/HipPCpvalues.csv")
+
+head(newtable)
+
+pvaluec <- subset(newtable, p.value < 0.05)
+
+pvaluec
+
+```
+Hip <-as.data.frame(HipPC[,c(9:28)])
+dim(Hip)
+for (i in 9:length(Hip)) { 
+  variable <- Hip[,i]
+  lme_cer <- lmer(variable ~ Group + ICV + (1 | Subject), data = HipPC, REML = FALSE)
+print(summary(lme_cer))
+}
+```{r}
+
+newtable
+
+ordered <- newtable[order(newtable$p.value), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Documents/HipPCorderedpvalues.csv")
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Documents/correctionsHippoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+
+write.csv(res2, "~/Documents/finalhippoPCt.csv")
+
+
+```
+
+```{r}
+
+
+#effect sizes
+
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(HipPC)[-c(1:9)]) {
+ stor[[i]] <- lm(as.formula(paste(i, "~ Status")), 
+    data = HipPC)
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+stor3 <- as.data.frame(stor2)
+
+
+
+es <- as.data.frame(t(stor3), stringsAsFactors = FALSE)
+
+
+
+colnames(es) <- c("Intercept", "Effect_Size(Confidence_Intervals)")
+
+head(es)
+
+write.csv(es, "~/Desktop/PVAL/ordered/ThalPCEffectSizes.csv")
+
+
+```
+
+
+
+```{r}
+#means
+
+HipPC2 <- read_excel("~/Desktop/R/PretermControl/volumetry/Hippo_PC_Reduced.xlsx")
+
+#means 
+
+means <- HipPC2 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPCmeans.csv")
+
+filmean <- trymean[-c(1:3), ]
+
+filmean
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- HipPC2 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/ThalPCSD.csv")
+
+filsd <- trsd[-c(1:3), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Preterm", "Mean ± SD Control")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/HippoMeansSD.csv")
+
+newtable <- cbind(filmean, newtable)
+
+newtable
+
+ordered2 <- newtable[order(newtable$p.value), ]
+
+head(ordered)
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+
+finalfinal <- cbind(ordered2, FDR=round(FDR, 3))
+
+finalfinal
+
+
+write.csv(finalfinal, "~/Desktop/PVAL/final/finalfinalhippoPCt.csv")
+
+```
+
+iamcrying
+
+lapply(gavtable, summary)
+
+imcryingrn <- as.data.frame(gavtable)
+
+imcryingrn
+
+
+res.aov <- HipPC3 %>% anova_test(right_CA3_head ~ Status, covariate = ICV)
+get_anova_table(res.aov)
+
+
+```{r}
+
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(broom)
+
+HipPC3 <- read_excel("~/Desktop/R/PretermControl/volumetry/Hippo_PC_Reduced.xlsx")
+
+responseList <- names(HipPC3)[-c(1:9)]
+
+pwc1 <- list()
+for (i in responseList)
+  pwc1[[i]] <- HipPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Status")), covariate = "ICV",
+    p.adjust.method = "fdr")
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+#lets just try
+
+ordered <-ph[order(ph$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(res2, "~/Desktop/PVAL/final/HippoPC.csv")
+
+```
+
+
+```{r}
+
+library(emmeans)
+library(rstatix)
+
+ThalPC3 <- read_excel("~/Desktop/R/PretermControl/volumetry/Hippo_PC_Reduced.xlsx")
+
+ThalPC3
+
+responseList <- names(ThalPC3)[-c(1:9)]
+
+pwc1 <- list()
+for (i in responseList) 
+  pwc1[[i]] <- ThalPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Status")), covariate = "ICV",
+    p.adjust.method = "fdr")
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+ph
+means <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPCmeans.csv")
+
+filmean <- trymean[-c(1:3), ]
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/HipAsymPCSD.csv")
+
+filsd <- trsd[-c(1:3), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Control", "Mean ± SD Preterm")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/ThalMeansSD.csv")
+
+
+#lets just try
+
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalPC3)[-c(1:9)]) {
+ stor[[i]] <- aov(as.formula(paste(i, "~ Status")), covariate = "ICV", data= ThalPC3) 
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+ees
+
+phh <- cbind(filmean, ph, ees)
+
+phh
+
+##
+
+
+ordered <-phh[order(phh$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/hippoASymFINAL.csv")
+
+```
+
+
+
+storage <- list()
+iamcrying <- list()
+for(i in names(HipPC3)[-c(1:9)]) {
+  storage[[i]] <- HipPC3 %>% anova_test(as.formula(paste(i, "~ ICV + Status")))
+  iamcrying[[i]] <- get_anova_table(storage[[i]])
+}
+
+```{r}
+
+("~/Desktop/R/PretermControl/volumetry/Hippo_PC_Reduced.xlsx")
+
+responseList <- names(HipPC3)[-c(1:9)]
+for(n in responseList) {
+  anova2 <- aov(get(n) ~ ICV + Status, data = HipPC3)
+  summary(anova2)
+  wt_emm2 <- emmeans(anova2, "ICV")
+  output[[n]] <- pairs(wt_emm2)
+}
+
+output
+  
+
+library(tidyverse)
+  library(emmeans)
+  
+vector(mode = "list", length = N)
+
+pwc <- vector(mode ="list")
+output <-list()
+for (i in names(HipPC3)[-c(1:9)]) { 
+  pwc[[i]] <- HipPC3 %>% emmeans_test(as.formula(paste(i, "~ Status")), covariate = ICV,
+    p.adjust.method = "fdr") 
+  output[[n]] <- pairs(pwc)}
+
+responseList <- names(HipPC3)[-c(1:9)]
+
+
+modelList  <- lapply(responseList, function(resp) {
+  mF <- formula(paste(resp, " ~ ICV + Status"))
+  aov(mF, data = HipPC3)
+})
+
+modelList
+
+summary(modelList)
+modelList  <- lapply(responseList, function(aov) {
+  mF <- formula(paste(aov, " ~ ICV + Status"))
+  av <- aov(mF, data = HipPC3)
+  attr(av, 'call')$formula <- mF
+  av
+})
+
+modelList
+
+modelList2 <- lapply(modelList, function(x) pairs(emmeans(x, "ICV")))
+
+modelList2
+
+pwc
+
+pls <- lapply(pwc, summary)
+
+pls
+
+pwdata <- as.data.frame(pwc)
+
+trydf <- as.data.frame(pwc1, stringsAsFactors = FALSE)
+
+trydf
+
+pwdata <-as.data.frame(t(pwc1), stringsAsFactors = FALSE)
+
+pwdata
+
+
+pwc %>% separate()
+
+t <- summary(pwc)
+
+View(t)
+
+library(tidyverse)
+
+aov.models = HipPC3[ , -grep("cyl", names(mtcars))] %>%
+  map(~ aov(mtcars$cyl ~ .x))
+
+
+aov.models = df[ , -grep("PGY_16", names(df))] %>%
+  map(~ aov(df$PGY_16 ~ .x))
+
+
+HipPC3$Group <- as.factor(HipPC$Group)
+
+HipPC3$Gender <- as.factor(HipPC$Gender)
+
+HipPC3$Age <- as.numeric(HipPC$Age)
+
+HipPC3$Status <- as.factor(HipPC$Status)
+
+HipPC3$GA <- as.numeric(HipPC$GA)
+
+HipPC3$Pds_N <- as.numeric(HipPC$Pds_N)
+
+sapply(HipPC3,class)
+
+HipPC3$Subject <- unlist(HipPC3$Subject)
+
+HipPC3$Exp <- unlist(HipPC3$Exp)
+
+for(i in responseList)
+  {
+column <- responseList
+avz <- broom::tidy(aov(as.formula(paste(i, "~ Status", data = HipPC3))))
+}
+
+rlang::last_error()
+
+pwdata
+
+pwc <- list()
+for (i in names(HipPC3)[-c(1:9)]) { 
+  pwc[[i]] <- HipPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Status")), covariate = ICV,
+    p.adjust.method = "fdr") }
+
+pwc
+
+print(pwc)
+
+write.csv(pwc, "~/Desktop/PVAL/final/cryingt.csv")
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+
+
+
+avz <- broom::tidy(aov(df[,i] ~ group, data = df))
+
+
+
+pwc
+
+trydf
+
+lapply(split(trydf, by="term", keep.by=FALSE), unlist, use.names=FALSE)
+
+gavtable
+
+View(gavtable)
+
+```

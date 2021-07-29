@@ -1,0 +1,424 @@
+---
+title: "Thalamus_PC_again"
+output: pdf_document
+---
+---
+title: "April10_PC_Thalpo"
+output: pdf_document
+---
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+ThalPC <- read_excel("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced_NANO.xlsx")
+
+str(ThalPC)
+
+ThalPC$Group <- as.factor(ThalPC$Group)
+
+ThalPC$Gender <- as.factor(ThalPC$Gender)
+
+ThalPC$Age <- as.numeric(ThalPC$Age)
+
+ThalPC$Status <- as.factor(ThalPC$Status)
+
+ThalPC$GA <- as.numeric(ThalPC$GA)
+
+ThalPC$Pds_N <- as.numeric(ThalPC$Pds_N)
+
+str(ThalPC)
+
+#check the data for outliers
+summary(ThalPC)
+
+levels(ThalPC$Group)
+
+#relevel
+
+ThalPC$Status <- relevel(ThalPC$Status, ref= "Preterm")
+
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+#writecsv with this table
+
+#Again with Volumetrically Corrected Data
+
+
+table_one <- tableby(Status ~ ., data= ThalPC)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/ThalPCSummary.csv")
+
+
+
+```
+
+To Volumetrically Correct the Data
+
+for (column.name in names(ThalPC) [9:ncol(ThalPC)]) {
+  ThalPC[column.name] = ThalPC[column.name] / ThalPC$ICV
+}
+
+view(ThalPC)
+
+
+```{r}
+
+for (column.name in names(ThalPC)[-c(1:9)]) {
+  ThalPC[column.name] = ThalPC[column.name] / ThalPC$ICV
+}
+
+head(ThalPC)
+```
+
+```{r}
+#testing lmer
+library(lme4)
+
+l1 <- lm(data= ThalPC, Left_MGN ~ Status + Age)
+
+summary(l1)
+
+#looping lm for entire data set
+
+storage <- list()
+for(i in names(ThalPC)[-c(1:9)]){
+  storage[[i]] <- lm(get(i) ~ Status*Pds_N, ThalPC)
+}
+
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+to <- subset(tab, select = -c(2))
+
+newtable <- to[!grepl("Intercept", to$term),]
+
+newtable
+
+write.csv(to, "~/Documents/ThalPCpvalues.csv")
+
+head(newtable)
+
+pvaluec <- subset(newtable, p.value < 0.05)
+
+pvaluec
+
+```
+Thal <-as.data.frame(ThalPC[,c(9:28)])
+dim(Thal)
+for (i in 9:length(Thal)) { 
+  variable <- Thal[,i]
+  lme_cer <- lmer(variable ~ Group + ICV + (1 | Subject), data = ThalPC, REML = FALSE)
+print(summary(lme_cer))
+}
+```{r}
+
+newtable
+
+write.csv(newtable, "~/Desktop/PVAL/FINAL/FINALTHALPDN2.csv")
+
+ordered <- newtable[order(newtable$p.value), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Documents/ThalPCorderedPDSNpvalues.csv")
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Documents/correctionsThalpoPDSNPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+finalordered <- final[order(final$dvsub), ]
+
+finalordered
+
+
+write.csv(finalordered, "~/Desktop/PVAL/final/finalPds_NFINAL.csv")
+
+
+```
+
+
+```{r}
+
+#effect sizes
+
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalPC)[-c(1:9)]) {
+ stor[[i]] <- lm(as.formula(paste(i, "~ Status")), 
+    data = ThalPC)
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+stor3 <- as.data.frame(stor2)
+
+
+
+es <- as.data.frame(t(stor3), stringsAsFactors = FALSE)
+
+
+
+colnames(es) <- c("Intercept", "Effect_Size(Confidence_Intervals)")
+
+head(es)
+
+write.csv(es, "~/Desktop/PVAL/ordered/ThalPCEffectSizes.csv")
+
+
+```
+
+
+
+```{r}
+#means
+
+ThalPC2 <- read_excel("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced.xlsx")
+
+#means 
+
+storage <- list()
+for(i in names(ThalPC)[-c(1:9)]){
+  storage[[i]] <- lm(get(i) ~ Status*GA, ThalPC)
+}
+
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+to <- subset(tab, select = -c(2))
+
+newtable <- filter(to, term == "Status:GA")
+
+newtable
+
+to
+
+p <- subset(to, p.value < 0.05)
+
+p
+newt <- p[!grepl("Intercept", p$term),]
+
+newt
+
+newtable
+
+write.csv(to, "~/Documents/ThalPCpvalues.csv")
+
+head(newtable)
+
+pvaluec <- subset(newtable, p.value < 0.05)
+
+pvaluec
+
+newtable
+
+ordered <- newtable[order(newtable$p.value), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Documents/ThalPCorderedpvalues.csv")
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Documents/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+```
+
+```{r}
+
+fit <- lm(Left_Pc ~ GA*Status, data= ThalPC)
+
+summary(fit)
+
+ggplot(ThalPC) + aes(x= Pds_N, y = Left_Pc, colour= Status) + geom_point() + geom_smooth(method = "lm") + labs(title= "Volume of Left CeM in Preterm vs. Controls", x= "Birth Weight(g)", y= "Volume (mm3)") 
+
+plot_model(fit, type = "pred", terms = c("GA", "Status"))
+
+library(sjPlot)
+library(sjmisc)
+library(ggplot2)
+
+theme_set(theme_sjplot())
+```
+
+```{r}
+means <- ThalPC2 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPCmeans.csv")
+
+filmean <- trymean[-c(1:3), ]
+
+filmean
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- ThalPC2 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/ThalPCSD.csv")
+
+filsd <- trsd[-c(1:3), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Preterm", "Mean ± SD Control")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/ThalpoMeansSD.csv")
+
+newtable <- cbind(filmean, newtable)
+
+newtable
+
+ordered2 <- newtable[order(newtable$p.value), ]
+
+head(ordered)
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+
+finalfinal <- cbind(ordered2, FDR=round(FDR, 3))
+
+finalfinal
+
+
+write.csv(finalfinal, "~/Desktop/PVAL/final/finalfinalThalpoPCt.csv")
+
+```
+
+```{r}
+
+sig <- subset(final, p.value < 0.05)
+
+final
+
+names <- sig$dvsub
+names
+
+colNames <- names
+
+
+for(i in seq_along(colNames)) {
+plt<- ggplot(ThalPC, aes_string(x= "Pds_N", y = colNames[i], color= "Status")) + geom_point() + geom_smooth(method= "lm") + theme_classic() + labs(x= "Birth Weight (g)", y= "Volume (mm3)", colour="Status", title= paste("Volume of ", colNames[i], " in VPT Children vs Controls", sep = "") )
+print(plt)
+Sys.sleep(2)
+}
+
+
+```
+
+
+```{r}
+
+test <- ggcorr(ThalPC,  geom = "text", nbreaks = 5, palette = "RdYlBu", hjust = 1, label = TRUE, label_alpha = 0.5)
+
+test
+
+```

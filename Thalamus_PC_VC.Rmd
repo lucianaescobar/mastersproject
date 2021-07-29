@@ -1,0 +1,738 @@
+---
+title: "Thalm_PC_VC"
+output: pdf_document
+---
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+ThalPC <- read_excel("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced.xlsx")
+
+str(ThalPC)
+
+ThalPC$Group <- as.factor(ThalPC$Group)
+
+ThalPC$Gender <- as.factor(ThalPC$Gender)
+
+ThalPC$Age <- as.numeric(ThalPC$Age)
+
+ThalPC$Status <- as.factor(ThalPC$Status)
+
+ThalPC$GA <- as.numeric(ThalPC$GA)
+
+ThalPC$Pds_N <- as.numeric(ThalPC$Pds_N)
+
+str(ThalPC)
+
+#check the data for outliers
+summary(ThalPC)
+
+levels(ThalPC$Group)
+
+#relevel
+
+ThalPC$Status <- relevel(ThalPC$Status, ref= "Preterm")
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+
+
+table_one <- tableby(Status ~ ., data= ThalPC)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/TableOne/ThalPCSummary.csv")
+
+
+
+```
+
+for (column.name in names(ThalPC) [9:ncol(ThalPC)]) {
+  ThalPC[column.name] = ThalPC[column.name] / ThalPC$ICV
+}
+
+
+
+```{r}
+
+#means 
+
+means <- ThalPC %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPCmeans.csv")
+
+filmean <- trymean[-c(1:5), ]
+
+filmean
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- ThalPC %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/ThalPCSD.csv")
+
+filsd <- trsd[-c(1:5), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Preterm", "Mean ± SD Control")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/ThalMeansSD.csv")
+
+```
+
+```{r}
+
+#volumetric corrections
+
+for (column.name in names(ThalPC)[10:ncol(ThalPC)]) {
+  ThalPC[column.name] = ThalPC[column.name] / ThalPC$ICV
+}
+
+head(ThalPC)
+
+
+```
+
+
+```{r}
+#testing lmer
+library(lme4)
+library(dplyr)
+library(tibble)
+
+l1 <- lm(data= ThalPC, Left_LGN ~ Status*ICV)
+
+summary(l1)
+
+#looping lm for entire data set
+
+storage <- list()
+for(i in names(ThalPC)[-c(1:9)]){
+  storage[[i]] <- lm(get(i) ~ Status, ThalPC)
+}
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+to <- subset(tab, select = -c(2))
+
+
+newtable <- filter(to, term == "StatusControl")
+
+newtable
+
+write.csv(to, "~/Desktop/PVAL/filtered/ThalPCpvalues.csv")
+
+
+```
+
+
+storage2 <- list()
+for(i in seq_along(tl)) {
+  tl[i] <- lm(data= ThalPC, tl[i] ~ Status)
+  storage[[i]] <- lm(get(i) ~ Status, ThalPC)
+pls <- effectsize(tl[i])}
+
+tl <- names(ThalPC)[-c(1:9)]
+
+stor3 <- list()
+for(i in names(ThalPC)[-c(1:9)]) {
+ stor3[[i]] <- effectsize(lm(as.formula(paste(i, "~ Status"))), 
+    data = ThalPC)}
+
+```{r}
+
+#effect sizes
+
+library(effectsize)
+
+head(ThalPC)
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalPC)[-c(1:9)]) {
+ stor[[i]] <- aov(as.formula(paste(i, "~ Status")), data=ThalPC) 
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+
+write.csv(es, "~/Desktop/PVAL/ordered/ThalPCEffectSizes.csv")
+
+
+ees
+
+
+```
+
+
+```{r}
+newtable
+
+pvaluec <- subset(newtable, p.value < 0.05)
+
+pvaluec
+
+newtable2 <- cbind(filmean, newtable)
+
+newtable2
+
+
+```
+Thal <-as.data.frame(ThalPC[,c(9:28)])
+dim(Thal)
+for (i in 9:length(Thal)) { 
+  variable <- Thal[,i]
+  lme_cer <- lmer(variable ~ Group + ICV + (1 | Subject), data = ThalPC, REML = FALSE)
+print(summary(lme_cer))
+}
+```{r}
+
+
+ordered <- newtable2[order(newtable2$p.value), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPCorderedpvalues.csv")
+
+pvals <- ordered$p.value
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+
+```
+
+```{r}
+
+write.csv(final, "~/Desktop/PVAL/final/finalThalpoPCt.csv")
+
+
+colNames <- names(ThalPC)[-c(1:8)]
+
+ggplot(ThalPC, aes(x= Status, y = ICV, color= Status)) + geom_boxplot() + theme_classic() + labs(title= "Volume of Left_LGN In VPT Children vs Controls", x= "Group", y= "Volume")
+
+#all graphs
+
+seq_along(colNames)
+
+for(i in seq_along(colNames)) {
+plt<- ggplot(ThalPC, aes_string(x= "Status", y = colNames[i], color= "Status")) + geom_boxplot() + theme_classic() + labs(x= "Group", y= "Volume", title= paste("Volume of ", colNames[i], " in VPT Children vs Controls", sep = "") )
+print(plt)
+ggsave(plt, filename = paste("VPT vs CT volume of ", colNames[i], ".jpg", sep=""))
+Sys.sleep(2)
+}
+
+
+library(rlang)
+library(tidyverse)
+
+```
+
+
+```{r}
+
+#trying to extract only significant graphs 
+
+fdrsig <- subset(ordered, FDR < 0.1)
+
+fdrsig
+
+nm <- fdrsig$dvsub
+
+nm
+
+
+for(i in seq_along(nm)) {
+plt<- ggplot(ThalPC, aes_string(x= "Status", y = nm[i], color= "Status")) + geom_boxplot() + theme_classic() + labs(x= "Group", y= "Volume", title= paste("Volume of ", nm[i], " in VPT Children vs Controls", sep = "") )
+print(plt)
+ggsave(plt, filename = paste("Sig VPT vs CT volume of ", nm[i], ".jpg", sep=""))
+Sys.sleep(2)
+}
+
+
+for(i in seq_along(nm)) {
+plt<- ggplot(ThalPC, aes_string(x= "Pds_N", y = nm[i])) + geom_point() + geom_smooth(method="glm") + geom_jitter() + theme_classic() + labs(x= "Group", y= "Volume", title= paste("Volume of ", nm[i], " by birthweight in VPT Children vs Controls", sep = "") )
+print(plt)
+Sys.sleep(2)
+}
+
+
+```
+
+
+```{r}
+library(anova)
+
+
+storage <- list()
+gavtable <- list()
+for(i in names(ThalPC)[-c(1:9)]) {
+  storage[[i]] <- ThalPC %>% anova_test(as.formula(paste(i, "~ ICV + Status")))
+  gavtable[[i]] <- get_anova_table(storage[[i]])
+}
+
+gavtable
+
+View(gavtable)
+
+
+
+```
+
+
+```{r}
+
+library("afex")     # needed for ANOVA functions.
+library("emmeans")  # emmeans must now be loaded explicitly for follow-up tests.
+library("multcomp") # for advanced control for multiple testing/Type 1 errors.
+library("ggplot2")
+
+ThalPC3 <- read_excel("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced.xlsx")
+responseList <- names(ThalPC3)[-c(1:9)]
+
+av <- list()
+for (i in responseList)
+av[[i]] <- ThalPC3 %>% anova_test(as.formula(paste(i, "~ ICV + Status")))
+
+
+ah <-data.table::rbindlist(av, fill = T)
+
+ah
+
+ah2 <- filter(ah, Effect == "Status")
+
+ah <- ah2
+
+ah
+
+ordered2 <-ah[order(ah$p), ]
+
+head(ordered2)
+
+write.csv(ordered2, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals2 <- ordered2$p
+pvals2
+
+FDR = p.adjust(pvals2, "fdr")
+res = cbind(pvals2, FDR=round(FDR, 3))
+
+res
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final2 <- cbind(ordered2, FDR=round(FDR, 3))
+
+final2
+
+
+
+```
+  read.csv("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced.xlsx", sep= ",")
+```{r}
+library(emmeans)
+library(rstatix)
+
+ThalPC3 <- read_excel("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced.xlsx")
+
+ThalPC3
+
+responseList <- names(ThalPC3)[-c(1:9)]
+
+pwc1 <- list()
+for (i in responseList) 
+  pwc1[[i]] <- ThalPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Status")), covariate= "ICV",
+    p.adjust.method = "fdr")
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+ph
+
+#lets just try
+
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalPC3)[-c(1:8)]) {
+ stor[[i]] <- aov(as.formula(paste(i, "~ Status")), covariate= "ICV", data= ThalPC3) 
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+ees
+
+phh <- cbind(ph, ees)
+
+phh
+
+##
+
+
+ordered <-ph[order(ph$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/fdr/THALPCFINAL.csv")
+
+
+```
+
+```{r}
+
+ThalPC <- read_excel("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced.xlsx")
+
+responseList <- names(ThalPC)[-c(1:)]
+
+res.aov <- ThalPC %>% 
+  anova_test(Left_CeM ~ ICV + Status*Pds_N)
+
+
+test <- ThalPC %>% 
+  group_by(Pds_N) %>%
+  emmeans_test(Left_CeM ~ Status, p.adjust.method = "fdr")
+
+test
+
+pwc1 <- list()
+for (i in responseList) 
+  pwc1[[i]] <- ThalPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Pds_N")), covariate = "ICV",
+    p.adjust.method = "fdr")
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+ph
+
+#lets just try
+
+ordered <-ph[order(ph$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+
+
+```
+
+```{r}
+library(emmeans)
+library(rstatix)
+
+ThalPC3 <- read_excel("~/Desktop/R/PretermControl/volumetry/Thalamus_PC_Reduced.xlsx")
+
+ThalPC3
+str(ThalPC3)
+
+lm1 <- lm(data=ThalPC3, ICV ~ Status)
+
+summary(lm1)
+
+responseList <- names(ThalPC3)[-c(1:9)]
+
+pwc1 <- list()
+for (i in responseList) 
+  pwc1[[i]] <- ThalPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Status")), covariate = "ICV",
+    p.adjust.method = "fdr")
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+ph
+means <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPCmeans.csv")
+
+filmean <- trymean[-c(1:3), ]
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/HipAsymPCSD.csv")
+
+filsd <- trsd[-c(1:3), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Control", "Mean ± SD Preterm")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/ThalMeansSD.csv")
+
+
+#lets just try
+
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalPC3)[-c(1:9)]) {
+ stor[[i]] <- aov(as.formula(paste(i, "~ Status")), covariate = "ICV", data= ThalPC3) 
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+ees
+
+phh <- cbind(filmean, ph, ees)
+
+phh
+
+##
+
+
+ordered <-phh[order(phh$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/ThalAsymFINAL.csv")
+
+```
+
+
+
+
+```{r}
+head(ThalPC)
+
+
+
+
+
+lm
+
+storage <- list()
+gorage <- list()
+for(i in names(ThalPC3)[-c(1:9)]) {
+  storage[[i]] <- lm(get(i) ~ Status, ThalPC)
+  gorage[[i]] <- effectsize((storage[[i]]))
+}
+
+effectsize(lm2)
+
+stor[[i]]
+
+for (i in names (ThalPC)[-c(1:9)]) {
+  storage[[i]] <- lm(get(i) ~ Status, ThalPC)
+  print(storage[[i]])}
+
+n <- names(ThalPC)[-c(1:9)]
+
+for (i in seq_along(n)) {
+  effectsize(lm(i ~ Status, ThalPC)) }
+
+
+View(ThalPC)
+
+lm2 <- lm(Right_Pf ~ Status, ThalPC)
+
+lm2
+
+effectsize(lm(Right_Pf~ Status, ThalPC))
+
+
+summary(lm1)
+
+effectsize(lm1)
+
+table2 <-  stor %>% tibble(
+    Region = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+table2
+
+storage <- list()
+for(i in names(ThalPC)[-c(1:8)]){
+  storage[[i]] <- lm(get(i) ~ Status, ThalPC)
+}
+
+n <- names(ThalPC)[-c(1:9)]
+
+storage <- list()
+for(i in seq_along(n)) {
+  storage[[i]] <- coh_d(ThalPC, i ~ Status, se = TRUE)
+}
+
+a <- coh_d(ThalPC, Left_LGN ~ Status, se= TRUE)
+
+a
+
+table_one <- tableby(Status ~ ., data= ThalPC)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+try <- effectsize(stor[[i]])
+
+library(esvis)
+
+coh_d(ThalPC, get(i) ~ Status, se = TRUE)
+
+
+View(table2)
+
+l1 <- lm(data= ThalPC, Right_CeM~ Status)
+
+summary(l1)
+
+effectsize(l1)
+```

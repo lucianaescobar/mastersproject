@@ -1,0 +1,287 @@
+---
+title: "THALASYMPC"
+output: pdf_document
+---
+---
+title: "ThalAsym_PC"
+output: pdf_document
+---
+PC VOLUMETRY CODE 
+
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+ThalPC <- read_excel("~/Desktop/R/PretermControl/asymmetry/Thalamus_PC_Asymm_Red.xlsx")
+
+str(ThalPC)
+
+ThalPC$Group <- as.factor(ThalPC$Group)
+
+ThalPC$Gender <- as.factor(ThalPC$Gender)
+
+ThalPC$Age <- as.numeric(ThalPC$Age)
+
+str(ThalPC)
+
+#check the data for outliers
+summary(ThalPC)
+
+levels(ThalPC$Group)
+
+#relevel
+
+ThalPC$Group <- relevel(ThalPC$Group, ref= "Pre")
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+#writecsv with this table
+
+#Again with Volumetrically Corrected Data
+
+
+table_one <- tableby(Status ~ ., data= ThalPC)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/ThalPCSummary.csv")
+
+
+
+```
+
+To Volumetrically Correct the Data
+
+for (column.name in names(ThalPC) [9:ncol(ThalPC)]) {
+  ThalPC[column.name] = ThalPC[column.name] / ThalPC$ICV
+}
+
+view(ThalPC)
+
+
+```{r}
+
+#testing lmer
+l1 <- lm(data= ThalPC, CeM ~ Status)
+
+library(effectsize)
+library(pwr)
+
+#looping lm for entire data set
+
+storage <- list()
+for(i in names(ThalPC)[-c(1:9)]){
+  storage[[i]] <- lm(get(i) ~ Status, ThalPC)
+}
+
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+View(tab)
+
+to <- subset(tab, select = -c(2))
+
+to
+
+newtable <- filter(to, term == "StatusPreterm")
+
+write.csv(to, "~/Documents/HipPCpvalues.csv")
+
+head(newtable)
+
+pvaluec <- subset(newtable, p.value < 0.05)
+
+pvaluec
+
+#rightBasalnucleus
+
+ordered <- newtable[order(newtable$p.value), ]
+
+ordered
+
+write.csv(ordered, "~/Documents/HipAasymmetryorderedpvalues.csv")
+
+pvals <- ordered$p.value
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Documents/correctionsThalgdalaasymmetry.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(res2, "~/Documents/finalhippoPC.csv")
+
+```
+
+
+
+```{r}
+
+library(emmeans)
+library(rstatix)
+
+ThalPC3 <- read_excel("~/Desktop/R/PretermControl/asymmetry/Thalamus_PC_Asymm_Red.xlsx")
+
+ThalPC3
+
+responseList <- names(ThalPC3)[-c(1:8)]
+
+pwc1 <- list()
+for (i in responseList) 
+  pwc1[[i]] <- ThalPC3 %>% 
+  emmeans_test(as.formula(paste(i, "~ Status")),
+    p.adjust.method = "fdr")
+
+
+ph <-data.table::rbindlist(pwc1, fill = T)
+
+ph
+
+#lets just try
+means <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPCmeans.csv")
+
+filmean <- trymean[-c(1:2), ]
+
+colnames(filmean) <- c("Mean_Preterm", "Mean_Control")
+
+sd <- ThalPC3 %>%
+  group_by(Status) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/HipAsymPCSD.csv")
+
+filsd <- trsd[-c(1:2), ]
+
+colnames(filsd) <- c("SD_Preterm", "SD_Control")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Preterm)
+
+
+filmean$Mean_Preterm <- paste(filmean$Mean_Preterm, filsd$SD_Preterm, sep=" ±")
+
+filmean$Mean_Control <- paste(filmean$Mean_Control, filsd$SD_Control, sep=" ±")
+
+filmean
+
+colnames(filmean) <- c("Mean ± SD Control", "Mean ± SD Preterm")
+
+filmean
+
+write.csv(filmean, "~/Desktop/PVAL/filtered/ThalMeansSD.csv")
+
+
+#lets just try
+
+library(effectsize)
+
+
+stor <- list()
+stor2 <- list()
+for(i in names(ThalPC3)[-c(1:8)]) {
+ stor[[i]] <- aov(as.formula(paste(i, "~ Status")), covariate = "ICV", data= ThalPC3) 
+ stor2[[i]] <- effectsize(stor[[i]])
+}
+
+ees <-data.table::rbindlist(stor2, fill = T)
+
+ees
+
+phh <- cbind(filmean, ph, ees)
+
+phh
+
+##
+
+
+ordered <-phh[order(phh$p), ]
+
+head(ordered)
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalPC3orderedpvalues.csv")
+
+pvals <- ordered$p
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalpoPC.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/hippoASymFINAL.csv")
+
+```
+
+
+```
+```

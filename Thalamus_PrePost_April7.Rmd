@@ -1,0 +1,313 @@
+---
+title: "Thalamus_PrePost_April7"
+output: pdf_document
+---
+
+
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+ThalmPrePost <- read_excel("~/Desktop/R/PrePost/Regular/ThalamusPrePost.xlsx")
+
+str(ThalmPrePost)
+
+ThalmPrePost$Group <- as.factor(ThalmPrePost$Group)
+
+ThalmPrePost$Gender <- as.factor(ThalmPrePost$Gender)
+
+ThalmPrePost$Age <- as.numeric(ThalmPrePost$Age)
+
+str(ThalmPrePost)
+
+#check the data for outliers
+summary(ThalmPrePost)
+
+levels(ThalmPrePost$Group)
+
+#relevel
+
+ThalmPrePost$Group <- relevel(ThalmPrePost$Group, ref= "Pre")
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+#writecsv with this table
+
+#Again with Volumetrically Corrected Data
+
+
+table_one <- tableby(Group ~ ., data= ThalmPrePost)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/TableOne/ThalmPrePostSummary.csv")
+
+
+
+```
+
+To Volumetrically Correct the Data
+
+for (column.name in names(ThalmPrePost) [9:ncol(ThalmPrePost)]) {
+  ThalmPrePost[column.name] = ThalmPrePost[column.name] / ThalmPrePost$ICV
+}
+
+view(ThalmPrePost)
+
+```{r}
+
+#means
+
+means <- ThalmPrePost %>%
+  group_by(Group) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/ThalPrePostmeans.csv")
+
+filmean <- trymean[-c(1:5), ]
+
+filmean
+
+colnames(filmean) <- c("Mean_Pre", "Mean_Post")
+
+sd <- ThalmPrePost %>%
+  group_by(Group) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/ThalPrePostSD.csv")
+
+filsd <- trsd[-c(1:5), ]
+
+colnames(filsd) <- c("SD_Pre", "SD_Post")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Post)
+
+filmean$SD_Post <- filsd$SD_Post
+
+filmean$SD_Pre <- filsd$SD_Pre
+
+filmean
+
+
+
+
+```
+
+
+```{r}
+
+for (column.name in names(ThalmPrePost) [9:ncol(ThalmPrePost)]) {
+  ThalmPrePost[column.name] = ThalmPrePost[column.name] / ThalmPrePost$ICV
+}
+
+ThalmPrePost
+
+```
+
+```{r}
+#testing lmer
+library(lme4)
+
+model <- lmer(Left_LGN ~ Group + (1 | Subject), data = ThalmPrePost, REML = FALSE)
+
+
+
+##tring to do a paired sample t.test
+
+
+library(dplyr)
+
+
+#visualize data using boxplots
+
+library("PairedData")
+
+# Subset vol data before treatment
+before <- subset(ThalmPrePost,  Group == "Pre", Left_LGN,
+                 drop = TRUE)
+# subset weight data after treatment
+after <- subset(ThalmPrePost,  Group == "Post", Left_LGN,
+                 drop = TRUE)
+
+# Plot paired data
+library(PairedData)
+pd <- paired(before, after)
+plot(pd, type = "profile") + theme_bw()
+
+ggplot(data=ThalmPrePost) + aes(x= Group, y= Left_LGN, colour= Group) + geom_boxplot()
+
+
+##checking normality 
+
+# compute the difference
+d <- with(ThalmPrePost, 
+        Left_LGN[Group == "Pre"] - Left_LGN[Group == "Post"])
+d
+
+# Shapiro-Wilk normality test for the differences
+shapiro.test(d) # => p-value = 0.4
+
+#pvalue above 0.05 means that we can assume normality
+
+qqplot <- qqnorm(ThalmPrePost$Left_LGN, pch = 1, frame = FALSE)
+
+histogram(ThalmPrePost$Left_LGN)
+
+#nowt.test (if we were to assume normality) #cant use here since we havent volumetrically corrected the data and need to add it as covariate
+
+res <- t.test(Left_LGN ~ Group, ThalmPrePost, paired = TRUE)
+res
+
+#lmer results
+
+summary(model)
+
+##plot the data
+
+ggplot(ThalmPrePost) + aes(x= Group, y = Left_LGN, color= Group) + geom_boxplot() + labs(title= "Volume of Left Lateral Nucleus Pre and Post Mindfulness Intervention", x= "Intervention Group", y= "Volume") 
+
+
+##Now we use the final lmer formula
+
+fit.compact = lmer(formula = Left_LGN ~ Group + ICV + Age + Gender + (1 | Subject),
+                   data = ThalmPrePost)
+fit.augmented = lmer(formula = Left_LGN ~ Group + ICV + (1 | Subject),
+                     data = ThalmPrePost)
+
+# compare via Chisq-test
+anova(fit.compact, fit.augmented)
+```
+Thalm <-as.data.frame(ThalmPrePost[,c(9:28)])
+dim(Thalm)
+for (i in 9:length(Thalm)) { 
+  variable <- Thalm[,i]
+  lme_cer <- lmer(variable ~ Group + ICV + (1 | Subject), data = ThalmPrePost, REML = FALSE)
+print(summary(lme_cer))
+}
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+library(broom.mixed)
+library(lmerTest)
+
+storage <- list()
+for(i in names(ThalmPrePost)[-c(1:8)]){
+  storage[[i]] <- lmer(get(i) ~ Group + (1 | Subject), data= ThalmPrePost, REML = FALSE)
+}
+
+library(lme4)
+library(broom)
+library(broomExtra)
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+to <- subset(tab, select = -c(2))
+
+newtable <- filter(to, term == "GroupPost")
+
+newtable
+
+newtable2 <- cbind(filmean, newtable)
+
+newtable2
+
+write.csv(to, "~/Desktop/PVAL/ALL/ThalmPrePostvalues.csv")
+write.csv(newtable, "~/Desktop/PVAL/filtered/ThalmPostpvalues.csv")
+
+head(newtable2)
+
+
+pvaluec <- subset(newtable2, p.value < 0.05)
+
+pvaluec
+
+pvals <- newtable2$p.value
+
+
+
+```
+
+```{r}
+
+
+#bonferroni corrections
+
+ordered <- newtable2[order(newtable$p.value), ]
+
+ordered
+
+write.csv(ordered, "~/Desktop/PVAL/ordered/ThalmPrePostorderedpvalues.csv")
+
+pvals <- ordered$p.value
+
+pvals
+
+FDR = p.adjust(pvals, "fdr")
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionsThalPrePostsymmetry.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/finalthalprepost.csv")
+
+
+
+```

@@ -1,0 +1,371 @@
+---
+title: "HippoPrePost_April7"
+output: pdf_document
+---
+
+
+
+```{r}
+
+library(readxl)
+library(dplyr)
+library("devtools")
+library("corrplot")
+library("ggplot2")
+library("survival")
+library("Formula")
+library("lattice")
+library("magrittr")
+library("ggpubr")
+library("plyr")
+library("dplyr")
+library("Matrix")
+library("lme4")
+library("factoextra")
+library("ggfortify")
+library("Hmisc")
+library("tidyr")
+library("lme4")
+library("lmtest")
+library("lmerTest")
+library("emmeans")
+library("car")
+library("cNORM")
+library("BBmisc")
+library("psych")
+
+```
+
+```{r}
+HippocampusPrePost <- read_excel("~/Desktop/R/PrePost/Regular/HippocampusPrePost.xlsx")
+HippoPrePost <- HippocampusPrePost
+
+str(HippoPrePost)
+
+HippoPrePost$Group <- as.factor(HippoPrePost$Group)
+
+HippoPrePost$Gender <- as.factor(HippoPrePost$Gender)
+
+HippoPrePost$Age <- as.numeric(HippoPrePost$Age)
+
+str(HippoPrePost)
+
+#check the data for outliers
+summary(HippoPrePost)
+
+levels(HippoPrePost$Group)
+
+#relevel
+
+HippoPrePost$Group <- relevel(HippoPrePost$Group, ref= "Pre")
+
+```
+
+```{r}
+
+#some overall summaries
+
+library(arsenal)
+
+#writecsv with this table
+
+#Again with Volumetrically Corrected Data
+
+
+table_one <- tableby(Group ~ ., data= HippoPrePost)
+tab2 <- summary(table_one, title= "test", text= TRUE, results= "asis")
+
+tab2
+
+write.csv(tab2, "~/Desktop/TableOne/HippoPrePostSummary.csv")
+
+
+
+
+
+```
+
+To Volumetrically Correct the Data
+
+for (column.name in names(HippoPrePost) [9:ncol(HippoPrePost)]) {
+  HippoPrePost[column.name] = HippoPrePost[column.name] / HippoPrePost$ICV
+}
+
+view(HippoPrePost)
+
+
+```{r}
+#means 
+
+means <- HippoPrePost %>%
+  group_by(Group) %>%
+  summarise_if(is.numeric, mean)
+
+trymean <- as.data.frame(t(means), stringsAsFactors = FALSE)
+trymean
+
+write.csv(trymean, "~/Desktop/PVAL/filtered/HippoPrePostmeans.csv")
+
+filmean <- trymean[-c(1:5), ]
+
+filmean
+
+colnames(filmean) <- c("Mean Pre", "Mean Post")
+
+sd <- HippoPrePost %>%
+  group_by(Group) %>%
+  summarise_if(is.numeric, SD)
+
+sd
+trsd <- as.data.frame(t(sd), stringsAsFactors = FALSE)
+trsd
+
+write.csv(trsd, "~/Desktop/PVAL/filtered/HipASD.csv")
+
+filsd <- trsd[-c(1:5), ]
+
+colnames(filsd) <- c("SD_Pre", "SD_Post")
+
+filsd$SD_Post <- as.numeric(filsd$SD_Post)
+
+filmean$SD_Pre <- filsd$SD_Pre
+
+filmean$SD_Post <- filsd$SD_Post
+
+filmean
+
+```
+
+#cohen's d
+
+library(rstatix)
+
+dnames <- names(HippoPrePost)[-c(1:7)]
+
+cod <- for(i in seq_along(dnames)){
+HippoPrePost %>% cohens_d(left_CA1_body ~ Group, mu = 0, paired= TRUE)
+
+cod
+
+  library(pwr)
+cohen.ES(test = 'f2', size = 'large')
+```{r}
+
+
+#volumetrically correcting the data
+
+for (column.name in names(HippoPrePost) [9:ncol(HippoPrePost)]) {
+  HippoPrePost[column.name] = HippoPrePost[column.name] / HippoPrePost$ICV
+}
+  
+HippoPrePost
+
+
+```
+
+```{r}
+
+#testing lmer
+library(lme4)
+
+model <- lmer(right_Hippocampal_tail ~ Group + (1 | Subject), data = HippoPrePost, REML = FALSE)
+
+summary(model)
+
+
+##tring to do a paired sample t.test
+
+
+library(dplyr)
+
+
+#visualize data using boxplots
+
+library("PairedData")
+
+# Subset vol data before treatment
+before <- subset(HippoPrePost,  Group == "Pre", left_CA3_head,
+                 drop = TRUE)
+# subset weight data after treatment
+after <- subset(HippoPrePost,  Group == "Post", left_CA3_head,
+                 drop = TRUE)
+
+# Plot paired data
+library(PairedData)
+pd <- paired(before, after)
+plot(pd, type = "profile") + theme_bw()
+
+ggplot(data=HippoPrePost) + aes(x= Group, y= left_CA3_head, colour= Group) + geom_boxplot()
+
+
+##checking normality 
+
+# compute the difference
+d <- with(HippoPrePost, 
+        left_CA3_head[Group == "Pre"] - left_CA3_head[Group == "Post"])
+d
+
+# Shapiro-Wilk normality test for the differences
+shapiro.test(d) # => p-value = 0.4
+
+#pvalue above 0.05 means that we can assume normality
+
+qqplot <- qqnorm(HippoPrePost$left_CA3_head, pch = 1, frame = FALSE)
+
+histogram(HippoPrePost$left_CA3_head)
+
+#nowt.test (if we were to assume normality) #cant use here since we havent volumetrically corrected the data and need to add it as covariate
+
+res <- t.test(left_CA3_head ~ Group, HippoPrePost, paired = TRUE)
+summary(res)
+
+#lmer results
+
+summary(model)
+
+##plot the data
+
+ggplot(HippoPrePost) + aes(x= Group, y = right_Whole_hippocampal_head, color= Group) + geom_boxplot() + labs(title= "Volume of Left CA3_body Pre and Post Mindfulness Intervention", x= "Intervention Group", y= "Volume") 
+
+
+##Now we use the final lmer formula
+
+fit.compact = lmer(formula = left_CA3_head ~ Group + Age + Gender + (1 | Subject),
+                   data = HippoPrePost)
+fit.augmented = lmer(formula = left_CA3_head ~ Group + Pds_N + (1 | Subject),
+                     data = HippoPrePost)
+
+# compare via Chisq-test
+anova(fit.compact, fit.augmented)
+```
+Hippo <-as.data.frame(HippoPrePost[,c(9:28)])
+dim(Hippo)
+for (i in 9:length(Hippo)) { 
+  variable <- Hippo[,i]
+  lme_cer <- lmer(variable ~ Group + ICV + (1 | Subject), data = HippoPrePost, REML = FALSE)
+print(summary(lme_cer))
+}
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(devtools)
+library(broom.mixed)
+library(lmerTest)
+
+storage <- list()
+for(i in names(HippoPrePost)[-c(1:8)]){
+  storage[[i]] <- lmer(get(i) ~ Group + (1 | Subject), data= HippoPrePost, REML = FALSE)
+}
+
+library(lme4)
+library(broom)
+library(broomExtra)
+
+table <-  storage %>% tibble(
+    dvsub = names(.),
+    untidied = .
+    ) %>%
+  mutate(tidy = map(untidied, broom::tidy)) %>%
+  unnest(tidy) 
+
+tab <- as.data.frame(table)
+
+write.csv(to, "~/Desktop/PVAL/ALL/Hippoprepostpvalues.csv")
+
+
+to <- subset(tab, select = -c(2))
+
+
+newtable <- filter(to, term == "GroupPost")
+
+newtable
+
+
+newtable2 <- cbind(filmean, newtable)
+
+newtable2
+
+write.csv(to, "~/Desktop/PVAL/filtered/Hippoprepostpvalues.csv")
+
+
+write.csv(to, "~/Desktop/PVAL/HippoPrePostMeanSD.csv")
+
+```
+
+```{r}
+
+pvaluec <- subset(newtable, p.value < 0.05)
+
+pvaluec
+
+write.csv(pvaluec, "~/Desktop/pvalues/hippoprepostsigpvalues.csv")
+
+ordered <- newtable2[order(newtable$p.value), ]
+ordered
+
+write.csv(ordered, "~/Documents/Hipprepostorderedpvalues.csv")
+
+pvals <- ordered$p.value
+
+```
+
+```{r}
+
+#corrections
+
+FDR = p.adjust(pvals, "fdr")
+
+res2 = cbind(pvals, FDR=round(FDR, 3))
+
+res2
+
+write.csv(res2, "~/Desktop/PVAL/fdr/correctionshippoPrePost.csv")
+
+final <- cbind(ordered, FDR=round(FDR, 3))
+
+final
+
+write.csv(final, "~/Desktop/PVAL/final/finalhippoprepost.csv")
+
+```
+
+```{r}
+
+#graphs of sig regions
+
+fdrsig <- subset(ordered, FDR < 0.1)
+
+fdrsig
+
+nm <- fdrsig$dvsub
+
+nm
+
+
+for(i in seq_along(nm)) {
+plt<- ggplot(HippoPrePost, aes_string(x= "Group", y = nm[i], color= "Group")) + geom_boxplot() + theme_classic() + labs(x= "Group", y= "Volume", title= paste("Volume of ", nm[i], " Pre and Post Mindfulness Intervention", sep = "") )
+print(plt)
+ggsave(plt, filename = paste("Sig Pre vs Post volume of ", nm[i], ".jpg", sep=""))
+Sys.sleep(2)
+}
+
+```
+
+```{r}
+#there are none in this case but we can run it again for all graphs
+
+colNames <- names(HippoPrePost)[-c(1:7)]
+
+for(i in seq_along(colNames)) {
+plt<- ggplot(HippoPrePost, aes_string(x= "Group", y = colNames[i], color= "Group")) + geom_boxplot() + theme_classic() + labs(x= "Group", y= "Volume", title= paste("Volume of ", colNames[i], " Pre and Post Mindfulness Intervention", sep = "") )
+ggsave(plt, filename = paste("Pre vs Post volume of ", colNames[i], ".jpg", sep=""))
+print(plt)
+Sys.sleep(2)
+}
+
+
+
+```
+
